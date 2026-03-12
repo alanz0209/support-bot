@@ -2,16 +2,18 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard - Support</title>
+    <title>Administration - Support</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
         <header class="chat-header">
-            <h1>📊 Dashboard Support</h1>
+            <h1>📊 Administration</h1>
             <div>
-                <a href="/analytics" class="admin-link">📈 Analytics</a>
-                <a href="/" class="admin-link">💬 Retour au Chat</a>
+                <a href="/admin/analytics" class="admin-link">📈 Stats</a>
+                <a href="/logout" class="admin-link">👋 Déconnexion</a>
+                <a href="/" class="admin-link">💬 Chat</a>
             </div>
         </header>
         
@@ -40,6 +42,7 @@
             </div>
         </div>
         
+        <h2 style="padding: 0 25px; margin-top: 20px;">🎫 Tickets</h2>
         <table>
             <thead>
                 <tr>
@@ -48,6 +51,7 @@
                     <th>Réponse</th>
                     <th>Statut</th>
                     <th>Priorité</th>
+                    <th>Email Client</th>
                     <th>Fichier</th>
                     <th>Date</th>
                     <th>Actions</th>
@@ -72,6 +76,11 @@
                         </span>
                     </td>
                     <td>
+                        <input type="email" placeholder="client@email.com" 
+                               id="user-email-{{ ticket[0] }}" 
+                               style="width: 150px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                    </td>
+                    <td>
                         {% if ticket[6] %}
                             <a href="{{ ticket[6] }}" target="_blank">📎 Voir</a>
                         {% else %}
@@ -80,15 +89,100 @@
                     </td>
                     <td>{{ ticket[8] }}</td>
                     <td>
-                        <button onclick="updatePriority({{ ticket[0] }}, 'urgent')" style="padding: 5px 10px; font-size: 0.8rem;">🔴 Urgent</button>
+                        <button onclick="notifyUser({{ ticket[0] }})" 
+                                style="padding: 5px 10px; font-size: 0.8rem; background: #22c55e;">
+                            📧 Notifier
+                        </button>
+                        <button onclick="updatePriority({{ ticket[0] }}, 'urgent')" 
+                                style="padding: 5px 10px; font-size: 0.8rem; background: #ef4444; margin-top: 5px;">
+                            🔴 Urgent
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        
+        {% if activity_log %}
+        <h2 style="padding: 0 25px; margin-top: 40px;">📋 Journal d'activité</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Heure</th>
+                    <th>Admin</th>
+                    <th>Action</th>
+                    <th>Ticket</th>
+                    <th>Détails</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in activity_log %}
+                <tr>
+                    <td>{{ log[5] }}</td>
+                    <td>{{ log[1] }}</td>
+                    <td>{{ log[2] }}</td>
+                    <td>#{{ log[3] }}</td>
+                    <td>{{ log[4] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
     </div>
     
     <script>
+        // WebSocket pour temps réel
+        let socket;
+        if (typeof io !== 'undefined') {
+            socket = io();
+            socket.on('connect', () => console.log('🔌 Connecté WebSocket'));
+            socket.on('ticket_updated', (data) => {
+                console.log('📋 Ticket mis à jour:', data);
+                const row = document.querySelector(`tr[data-ticket-id="${data.id}"]`);
+                if (row) {
+                    row.style.transition = 'background-color 0.3s';
+                    row.style.backgroundColor = '#fef3c7';
+                    setTimeout(() => { row.style.backgroundColor = 'transparent'; }, 1000);
+                }
+            });
+            socket.on('urgent_ticket', (data) => {
+                console.log('🔴 Ticket urgent:', data);
+                playAlertSound();
+                const row = document.querySelector(`tr[data-ticket-id="${data.id}"]`);
+                if (row) {
+                    row.style.transition = 'background-color 0.3s';
+                    row.style.backgroundColor = '#fee2e2';
+                    setTimeout(() => { row.style.backgroundColor = 'transparent'; }, 2000);
+                }
+            });
+        }
+        
+        function playAlertSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.2);
+                setTimeout(() => {
+                    const osc2 = audioContext.createOscillator();
+                    const gain2 = audioContext.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(audioContext.destination);
+                    osc2.frequency.value = 1000;
+                    gain2.gain.value = 0.3;
+                    osc2.start();
+                    osc2.stop(audioContext.currentTime + 0.2);
+                }, 250);
+            } catch (e) {
+                console.log('🔇 Son désactivé:', e);
+            }
+        }
+        
         async function updateStatus(id, status) {
             await fetch(`/api/tickets/${id}/status`, {
                 method: 'PUT',
@@ -104,6 +198,27 @@
                 body: JSON.stringify({priority})
             });
             location.reload();
+        }
+        
+        async function notifyUser(ticketId) {
+            const email = document.getElementById(`user-email-${ticketId}`).value;
+            if (!email) {
+                alert('⚠️ Veuillez entrer l\'email du client');
+                return;
+            }
+            
+            const response = await fetch(`/api/tickets/${ticketId}/notify`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email})
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                alert('✅ Email envoyé au client !');
+            } else {
+                alert('❌ Erreur : ' + (data.error || 'Échec de l\'envoi'));
+            }
         }
     </script>
 </body>

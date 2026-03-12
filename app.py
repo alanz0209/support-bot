@@ -1,6 +1,5 @@
-# app.py - Version complète avec Auth + Email + WebSocket
+# app.py
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from flask_socketio import SocketIO, emit
 from backend.database import Database
@@ -10,7 +9,6 @@ import os
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-import threading
 
 app = Flask(__name__, 
             template_folder='frontend/templates', 
@@ -18,10 +16,6 @@ app = Flask(__name__,
 app.config.from_object(Config)
 
 # Initialisation extensions
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
 mail = Mail(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -36,21 +30,8 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 db = Database()
 bot = SupportBot()
 
-# ==================== USER MODEL ====================
-class Admin(UserMixin):
-    def __init__(self, email, password_hash):
-        self.id = email
-        self.email = email
-        self.password_hash = password_hash
-    
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-@login_manager.user_loader
-def load_user(user_id):
-    if user_id == Config.ADMIN_EMAIL:
-        return Admin(Config.ADMIN_EMAIL, generate_password_hash(Config.ADMIN_PASSWORD))
-    return None
+# Hash du mot de passe admin (une seule fois au démarrage)
+ADMIN_PASSWORD_HASH = generate_password_hash(Config.ADMIN_PASSWORD)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -62,12 +43,11 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
         
-        if email == Config.ADMIN_EMAIL and check_password_hash(generate_password_hash(Config.ADMIN_PASSWORD), password):
-            # Pour simplifier, on utilise session directement
+        if email == Config.ADMIN_EMAIL and check_password_hash(ADMIN_PASSWORD_HASH, password):
             session['logged_in'] = True
             session['admin_email'] = email
             flash('✅ Connexion réussie !', 'success')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('admin_dashboard'))
         
         flash('❌ Email ou mot de passe incorrect', 'error')
     return render_template('login.html')
@@ -80,7 +60,6 @@ def logout():
     return redirect(url_for('index'))
 
 def login_required(f):
-    """Décorateur pour protéger les routes admin"""
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
             flash('🔐 Veuillez vous connecter', 'warning')
@@ -89,21 +68,23 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
-# ==================== ROUTES PRINCIPALES ====================
+# ==================== ROUTES PUBLIQUES ====================
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/dashboard')
+# ==================== ROUTES ADMIN (CACHÉES) ====================
+@app.route('/admin')
 @login_required
-def dashboard():
+def admin_dashboard():
     tickets = db.get_all_tickets()
     stats = db.get_ticket_stats()
-    return render_template('dashboard.html', tickets=tickets, stats=stats)
+    activity_log = db.get_activity_log(50)
+    return render_template('dashboard.html', tickets=tickets, stats=stats, activity_log=activity_log)
 
-@app.route('/analytics')
+@app.route('/admin/analytics')
 @login_required
-def analytics():
+def admin_analytics():
     stats = db.get_ticket_stats()
     analytics_data = db.get_analytics()
     return render_template('analytics.html', stats=stats, analytics=analytics_data)
@@ -119,19 +100,22 @@ def chat():
         return jsonify({'reply': 'Veuillez entrer un message ou joindre un fichier.'}), 400
     
     result = bot.get_response(user_message, file_url)
-    ticket_id = db.save_ticket(user_message, result['reply'], file_url, result['source'])
     
-    # 🚨 Notification WebSocket si ticket urgent
-    if 'urgent' in user_message.lower() or 'critique' in user_message.lower():
+    # Détection urgence : IA + Mots-clés
+    is_urgent = bot.detect_urgency(user_message)
+    priority = 'urgent' if is_urgent else 'normal'
+    
+    ticket_id = db.save_ticket(user_message, result['reply'], file_url, result['source'], priority)
+    
+    # 🚨 Si urgent → Email + WebSocket
+    if is_urgent:
+        send_urgent_email(ticket_id, user_message)
         socketio.emit('urgent_ticket', {
             'id': ticket_id,
             'message': user_message[:100],
             'priority': 'urgent',
             'timestamp': datetime.now().strftime('%H:%M')
-        }, broadcast=True)
-        
-        # 📧 Envoyer email d'alerte
-        send_urgent_email(ticket_id, user_message)
+        })
     
     return jsonify({
         'reply': result['reply'],
@@ -175,16 +159,26 @@ def save_feedback():
 @login_required
 def update_ticket_status(ticket_id):
     data = request.json
-    old_status = db.get_ticket(ticket_id)[3] if db.get_ticket(ticket_id) else None
+    ticket = db.get_ticket(ticket_id)
+    old_status = ticket[3] if ticket else None
+    
     db.update_ticket_status(ticket_id, data.get('status', 'open'))
     
+    # Journal d'activité
+    db.log_activity(
+        session.get('admin_email'),
+        'status_change',
+        ticket_id,
+        f"{old_status} → {data.get('status')}"
+    )
+    
     # Notification WebSocket
-    socketio.emit('urgent_ticket', {
-    'id': ticket_id,
-    'message': user_message[:100],
-    'priority': 'urgent',
-    'timestamp': datetime.now().strftime('%H:%M')
-}, broadcast_to=None)
+    socketio.emit('ticket_updated', {
+        'id': ticket_id,
+        'field': 'status',
+        'old': old_status,
+        'new': data.get('status')
+    })
     
     return jsonify({'success': True})
 
@@ -192,15 +186,76 @@ def update_ticket_status(ticket_id):
 @login_required
 def update_ticket_priority(ticket_id):
     data = request.json
+    ticket = db.get_ticket(ticket_id)
+    
     db.update_ticket_priority(ticket_id, data.get('priority', 'normal'))
+    
+    # Journal d'activité
+    db.log_activity(
+        session.get('admin_email'),
+        'priority_change',
+        ticket_id,
+        f"→ {data.get('priority')}"
+    )
     
     socketio.emit('ticket_updated', {
         'id': ticket_id,
         'field': 'priority',
         'new': data.get('priority')
-    }, broadcast=True)
+    })
     
     return jsonify({'success': True})
+
+@app.route('/api/tickets/<int:ticket_id>/notify', methods=['POST'])
+@login_required
+def notify_user(ticket_id):
+    """Envoie un email à l'utilisateur quand le ticket est résolu"""
+    data = request.json
+    user_email = data.get('email')
+    
+    if not user_email:
+        return jsonify({'error': 'Email requis'}), 400
+    
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        return jsonify({'error': 'Ticket non trouvé'}), 404
+    
+    try:
+        msg = Message(
+            subject=f'✅ Votre demande #{ticket_id} a été traitée',
+            recipients=[user_email],
+            body=f'''
+Bonjour,
+
+Votre ticket de support #{ticket_id} a été marqué comme résolu.
+
+📝 Votre demande : {ticket[1]}
+
+🤖 Réponse apportée :
+{ticket[2]}
+
+Si vous avez d'autres questions, répondez simplement à cet email
+ou créez un nouveau ticket sur notre chat.
+
+Cordialement,
+L'équipe Support
+            ''',
+            sender=Config.MAIL_DEFAULT_SENDER
+        )
+        mail.send(msg)
+        
+        # Journal d'activité
+        db.log_activity(
+            session.get('admin_email'),
+            'user_notified',
+            ticket_id,
+            f"Email envoyé à {user_email}"
+        )
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"❌ Erreur envoi email : {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ==================== EMAIL NOTIFICATIONS ====================
 def send_urgent_email(ticket_id, message):
@@ -216,7 +271,7 @@ Nouveau ticket urgent détecté !
 📝 Message: {message}
 🕐 Heure: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
-👉 Voir le dashboard: http://localhost:5000/dashboard
+👉 Voir le dashboard: http://localhost:5000/admin
             ''',
             sender=Config.MAIL_DEFAULT_SENDER
         )
@@ -224,19 +279,6 @@ Nouveau ticket urgent détecté !
         print(f"✅ Email d'alerte envoyé pour ticket #{ticket_id}")
     except Exception as e:
         print(f"❌ Erreur envoi email : {e}")
-
-def send_ticket_notification(ticket_id, status):
-    """Notification pour changement de statut"""
-    try:
-        msg = Message(
-            subject=f'📋 Ticket #{ticket_id} → {status}',
-            recipients=[Config.ADMIN_EMAIL],
-            body=f'Le ticket #{ticket_id} a été marqué comme "{status}".\n\nVoir: http://localhost:5000/dashboard',
-            sender=Config.MAIL_DEFAULT_SENDER
-        )
-        mail.send(msg)
-    except Exception as e:
-        print(f"❌ Erreur notification : {e}")
 
 # ==================== WEBSOCKET EVENTS ====================
 @socketio.on('connect')
@@ -246,12 +288,10 @@ def handle_connect():
 
 @socketio.on('admin_join')
 def handle_admin_join():
-    """Un admin rejoint le dashboard en temps réel"""
     if session.get('logged_in'):
         emit('admin_online', {'count': 1}, broadcast=True)
 
 # ==================== LANCEMENT ====================
 if __name__ == '__main__':
     os.makedirs('data', exist_ok=True)
-    # Pour le dev: debug=True, pour prod: use eventlet
     socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)

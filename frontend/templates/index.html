@@ -10,7 +10,7 @@
     <div class="chat-container">
         <header class="chat-header">
             <h1>🤖 Support Assistant</h1>
-            <a href="/dashboard" class="admin-link">📊 Dashboard</a>
+            <!-- ✅ PAS DE LIEN ADMIN - Discret -->
         </header>
         
         <div class="chat-messages" id="chatMessages">
@@ -39,6 +39,9 @@
             </div>
         </div>
     </div>
+    
+    <!-- Socket.IO pour les notifications temps réel -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
 </html>
