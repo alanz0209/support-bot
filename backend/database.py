@@ -155,3 +155,12 @@ class Database:
             'daily_conversations': daily_conversations,
             'top_questions': top_questions
         }
+    
+    def get_ticket(self, ticket_id):
+        """Récupère un ticket par son ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM tickets WHERE id = ?', (ticket_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row
