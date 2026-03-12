@@ -1,6 +1,5 @@
-// frontend/static/js/chat.js - Version Finale avec WebSocket
+// frontend/static/js/chat.js
 document.addEventListener('DOMContentLoaded', function() {
-    // === ÉLÉMENTS DOM ===
     const chatMessages = document.getElementById('chatMessages');
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
@@ -13,53 +12,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // === WEBSOCKET: Initialisation ===
     function initWebSocket() {
-        // Connexion au serveur Socket.IO
         socket = io();
         
         socket.on('connect', () => {
             console.log('🔌 Connecté au serveur temps réel');
-            if (sessionStorage.getItem('admin_email')) {
-                socket.emit('admin_join', { email: sessionStorage.getItem('admin_email') });
-            }
         });
         
         socket.on('disconnect', () => {
             console.log('🔌 Déconnecté du serveur temps réel');
         });
         
-        // 🚨 Notification: Ticket urgent reçu
         socket.on('urgent_ticket', (data) => {
             console.log('🔴 Ticket urgent:', data);
-            
-            // Notification navigateur
             showBrowserNotification('🔴 Ticket Urgent', `#${data.id}: ${data.message}`);
-            
-            // Son d'alerte
             playAlertSound();
-            
-            // Flash visuel si sur le dashboard
-            if (window.location.pathname === '/dashboard') {
+            if (window.location.pathname.startsWith('/admin')) {
                 flashDashboardRow(data.id, 'urgent');
             }
-            
-            // Afficher une notification dans le chat si ouvert
             if (chatMessages) {
                 showSystemNotification(`🔴 Nouveau ticket urgent #${data.id}`);
             }
         });
         
-        // 📋 Notification: Ticket mis à jour
         socket.on('ticket_updated', (data) => {
             console.log('📋 Ticket mis à jour:', data);
-            
-            if (window.location.pathname === '/dashboard') {
+            if (window.location.pathname.startsWith('/admin')) {
                 flashDashboardRow(data.id, 'updated');
-                // Optionnel: recharger pour voir les changements
-                // setTimeout(() => location.reload(), 1000);
             }
         });
         
-        // ✅ Confirmation de connexion
         socket.on('connected', (data) => {
             console.log('✅', data.message);
         });
@@ -71,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (Notification.permission === 'granted') {
                 new Notification(title, {
                     body: body,
-                    icon: '/static/images/bot-icon.png', // Ajoute une icône dans static/images/
+                    icon: '/static/images/bot-icon.png',
                     tag: 'support-bot-alert'
                 });
             } else if (Notification.permission === 'default') {
@@ -94,7 +75,6 @@ document.addEventListener('DOMContentLoaded', function() {
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
             
-            // Deux bips pour alerter
             oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
             gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
             oscillator.start();
@@ -123,7 +103,6 @@ document.addEventListener('DOMContentLoaded', function() {
             row.style.transition = 'background-color 0.3s';
             row.style.backgroundColor = color;
             
-            // Animation flash
             let flashes = 0;
             const flashInterval = setInterval(() => {
                 row.style.backgroundColor = flashes % 2 === 0 ? color : 'transparent';
@@ -136,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // === NOTIFICATIONS: Message système dans le chat ===
+    // === NOTIFICATIONS: Message système ===
     function showSystemNotification(text) {
         const div = document.createElement('div');
         div.className = 'message bot system-notification';
@@ -146,7 +125,6 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         
-        // Auto-dismiss après 10 secondes
         setTimeout(() => {
             div.style.opacity = '0';
             div.style.transition = 'opacity 0.5s';
@@ -174,7 +152,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const message = userInput.value.trim();
         if (!message && !selectedFile) return;
 
-        // Afficher le message utilisateur
         let displayMessage = message;
         if (selectedFile) {
             displayMessage += message ? `\n📎 Fichier : ${selectedFile.name}` : `📎 Fichier : ${selectedFile.name}`;
@@ -185,11 +162,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const fileToSend = selectedFile;
         removeFile();
 
-        // Indicateur de frappe
         const typingDiv = showTypingIndicator();
 
         try {
-            // Upload fichier si présent
             let fileUrl = null;
             if (fileToSend) {
                 const formData = new FormData();
@@ -205,7 +180,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Appel API chat
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -219,7 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
             typingDiv.remove();
             addMessage(data.reply, 'bot', data.source);
             
-            // Boutons de feedback (sauf si réponse FAQ)
             if (data.source !== 'FAQ') {
                 addFeedbackButtons(chatMessages.lastElementChild);
             }
@@ -231,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // === CHAT: Ajouter message à l'écran ===
+    // === CHAT: Ajouter message ===
     function addMessage(text, sender, source = null) {
         const div = document.createElement('div');
         div.className = `message ${sender}${source === 'FAQ' ? ' faq' : ''}`;
@@ -286,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    // === KEYBOARD: Touche Entrée pour envoyer ===
+    // === KEYBOARD: Touche Entrée ===
     userInput?.addEventListener('keypress', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -295,10 +268,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // === INITIALISATION ===
-    
-    // Demander permission pour les notifications navigateur
     if ('Notification' in window && Notification.permission === 'default') {
-        // On demande seulement si l'utilisateur interagit
         document.body.addEventListener('click', function requestNotifPermission() {
             Notification.requestPermission();
             document.body.removeEventListener('click', requestNotifPermission);
@@ -307,11 +277,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialiser WebSocket si sur une page admin
     if (typeof io !== 'undefined' && 
-        (window.location.pathname.startsWith('/dashboard') || 
-         window.location.pathname.startsWith('/analytics'))) {
+        (window.location.pathname.startsWith('/admin'))) {
         initWebSocket();
     }
     
-    // Focus sur le champ de saisie
     userInput?.focus();
 });

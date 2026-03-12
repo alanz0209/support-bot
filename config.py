@@ -8,7 +8,7 @@ class Config:
     DATABASE_PATH = os.getenv("DATABASE_PATH", "data/tickets.db")
     
     # Admin
-    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@company.com")
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "alanizogo@gmail.com")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
     
     # Email

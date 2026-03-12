@@ -2,14 +2,17 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Analytics - Support</title>
+    <title>Statistiques - Support</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="dashboard-container">
         <header class="chat-header">
-            <h1>📈 Analytics</h1>
-            <a href="/dashboard" class="admin-link">📊 Retour Dashboard</a>
+            <h1>📈 Statistiques</h1>
+            <div>
+                <a href="/admin" class="admin-link">📊 Dashboard</a>
+                <a href="/logout" class="admin-link">👋 Déconnexion</a>
+            </div>
         </header>
         
         <div class="dashboard-stats">
@@ -31,8 +34,8 @@
             </div>
         </div>
         
-        <div class="analytics-grid">
-            <div class="chart-card">
+        <div class="analytics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; padding: 25px;">
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h3>📅 Conversations (7 derniers jours)</h3>
                 <table>
                     <tr><th>Date</th><th>Nombre</th></tr>
@@ -42,7 +45,7 @@
                 </table>
             </div>
             
-            <div class="chart-card">
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h3>❓ Top Questions</h3>
                 <table>
                     <tr><th>Question</th><th>Fréquence</th></tr>
@@ -52,7 +55,7 @@
                 </table>
             </div>
             
-            <div class="chart-card">
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h3>🎯 Répartition par Statut</h3>
                 <table>
                     <tr><th>Statut</th><th>Nombre</th></tr>
@@ -62,7 +65,7 @@
                 </table>
             </div>
             
-            <div class="chart-card">
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h3>⚡ Répartition par Priorité</h3>
                 <table>
                     <tr><th>Priorité</th><th>Nombre</th></tr>

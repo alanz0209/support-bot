@@ -1,3 +1,4 @@
+# backend/database.py
 import sqlite3
 from datetime import datetime
 from config import Config
@@ -14,7 +15,7 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Table tickets avec statut et priorité
+        # Table tickets
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tickets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +25,7 @@ class Database:
                 priority TEXT DEFAULT 'normal',
                 file_url TEXT,
                 feedback_positive INTEGER,
+                source TEXT DEFAULT 'bot',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -39,27 +41,40 @@ class Database:
             )
         ''')
         
+        # Table activity_log (NOUVEAU)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_email TEXT,
+                action TEXT,
+                ticket_id INTEGER,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
-    def save_ticket(self, user_message, bot_response, file_url=None, source="bot"):
+    def save_ticket(self, user_message, bot_response, file_url=None, source="bot", priority="normal"):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
-        # Déterminer la priorité selon les mots-clés
-        priority = 'normal'
-        urgent_keywords = ['urgent', 'urgence', 'critique', 'bloqué', 'emergency']
-        if any(kw in user_message.lower() for kw in urgent_keywords):
-            priority = 'urgent'
-        
         cursor.execute(
-            '''INSERT INTO tickets (user_message, bot_response, priority, file_url, status) 
-               VALUES (?, ?, ?, ?, ?)''',
-            (user_message, bot_response, priority, file_url, 'open')
+            '''INSERT INTO tickets (user_message, bot_response, priority, file_url, source, status) 
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (user_message, bot_response, priority, file_url, source, 'open')
         )
         conn.commit()
         conn.close()
         return cursor.lastrowid
+    
+    def get_ticket(self, ticket_id):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM tickets WHERE id = ?', (ticket_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row
     
     def update_ticket_status(self, ticket_id, status):
         conn = self.get_connection()
@@ -94,20 +109,12 @@ class Database:
         cursor = conn.cursor()
         
         stats = {}
-        
-        # Total tickets
         cursor.execute('SELECT COUNT(*) FROM tickets')
         stats['total'] = cursor.fetchone()[0]
-        
-        # Par statut
         cursor.execute('SELECT status, COUNT(*) FROM tickets GROUP BY status')
         stats['by_status'] = dict(cursor.fetchall())
-        
-        # Par priorité
         cursor.execute('SELECT priority, COUNT(*) FROM tickets GROUP BY priority')
         stats['by_priority'] = dict(cursor.fetchall())
-        
-        # Feedback
         cursor.execute('SELECT COUNT(*) FROM tickets WHERE feedback_positive = 1')
         stats['positive_feedback'] = cursor.fetchone()[0]
         cursor.execute('SELECT COUNT(*) FROM tickets WHERE feedback_positive = 0')
@@ -129,8 +136,6 @@ class Database:
     def get_analytics(self):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
-        # Conversations par jour (7 derniers jours)
         cursor.execute('''
             SELECT DATE(created_at), COUNT(*) 
             FROM tickets 
@@ -139,8 +144,6 @@ class Database:
             ORDER BY DATE(created_at)
         ''')
         daily_conversations = cursor.fetchall()
-        
-        # Top questions
         cursor.execute('''
             SELECT user_message, COUNT(*) as count 
             FROM tickets 
@@ -149,18 +152,31 @@ class Database:
             LIMIT 10
         ''')
         top_questions = cursor.fetchall()
-        
         conn.close()
         return {
             'daily_conversations': daily_conversations,
             'top_questions': top_questions
         }
     
-    def get_ticket(self, ticket_id):
-        """Récupère un ticket par son ID"""
+    def log_activity(self, admin_email, action, ticket_id=None, details=None):
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM tickets WHERE id = ?', (ticket_id,))
-        row = cursor.fetchone()
+        cursor.execute(
+            '''INSERT INTO activity_log (admin_email, action, ticket_id, details) 
+               VALUES (?, ?, ?, ?)''',
+            (admin_email, action, ticket_id, details)
+        )
+        conn.commit()
         conn.close()
-        return row
+    
+    def get_activity_log(self, limit=50):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM activity_log 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        ''', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
