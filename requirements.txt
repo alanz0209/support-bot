@@ -5,4 +5,4 @@ Werkzeug==3.0.0
 flask-login==0.6.3
 flask-mail==0.9.1
 flask-socketio==5.3.6
-eventlet==0.33.3
+eventlet==0.40.3
