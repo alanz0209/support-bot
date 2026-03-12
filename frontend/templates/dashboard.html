@@ -55,7 +55,7 @@
             </thead>
             <tbody>
                 {% for ticket in tickets %}
-                <tr>
+                <tr data-ticket-id="{{ ticket[0] }}">
                     <td>#{{ ticket[0] }}</td>
                     <td>{{ ticket[1][:50] }}...</td>
                     <td>{{ ticket[2][:50] }}...</td>
