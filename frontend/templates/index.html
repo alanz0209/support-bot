@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <header class="chat-header">
+            <h1>🤖 Support Assistant</h1>
+            <a href="/dashboard" class="admin-link">Admin Dashboard</a>
+        </header>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <strong>Bot:</strong> Bonjour ! Comment puis-je vous aider aujourd'hui ?
+            </div>
+        </div>
+        
+        <div class="chat-input-area">
+            <input type="text" id="userInput" placeholder="Type your message...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+        <div class="feedback">
+            <button onclick="feedback(true)">👍 Utile</button>
+            <button onclick="feedback(false)">👎 Pas utile</button>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
