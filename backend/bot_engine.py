@@ -1,38 +1,51 @@
-from backend.knowledge_base import get_faq_response
+# backend/bot_engine.py
 import ollama
+from backend.knowledge_base import get_faq_response
 
 class SupportBot:
     def __init__(self):
-        self.model = "llama3.2"  # Doit correspondre au modèle téléchargé
+        self.model = "llama3.2"
         self.system_prompt = """Tu es un assistant support client EXPERT en informatique.
-            Règles :
-            - Réponds TOUJOURS dans la langue de l'utilisateur
-            - Sois concis (max 3-4 phrases)
-            - Utilise des exemples concrets quand c'est pertinent
-            - Si la question est technique, donne un exemple de code
-            - Reste toujours poli et professionnel
-            - Pour les problèmes complexes, propose un contact humain : support@company.com"""
-        print(f"✅ Bot Ollama prêt avec le modèle : {self.model}")
+Règles :
+- Réponds TOUJOURS dans la langue de l'utilisateur
+- Sois concis (max 3-4 phrases)
+- Utilise des exemples concrets
+- Reste poli et professionnel
+- Pour les problèmes complexes, propose : support@company.com"""
+        print(f"✅ Bot Ollama prêt : {self.model}")
     
-    def get_response(self, message):
-        # D'abord vérifier la FAQ
-        faq_answer = get_faq_response(message)
-        if faq_answer:
-            return faq_answer
+    def get_response(self, message, file_url=None):
+        # 1. Vérifier FAQ d'abord
+        faq_result = get_faq_response(message)
+        if faq_result["found"]:
+            return {
+                "reply": faq_result["response"],
+                "source": "FAQ"
+            }
+        
+        # 2. Sinon utiliser Ollama
         try:
+            context = ""
+            if file_url:
+                context = f"[Fichier joint : {file_url}] "
+            
             response = ollama.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": message}
+                    {"role": "user", "content": f"{context}{message}"}
                 ],
-                options={
-                    "temperature": 0.7,      # Créativité modérée
-                    "num_predict": 150       # Limite la longueur de réponse
-                }
+                options={"temperature": 0.7, "num_predict": 200}
             )
-            return response["message"]["content"].strip()
+            
+            return {
+                "reply": response["message"]["content"].strip(),
+                "source": "bot"
+            }
             
         except Exception as e:
-            print(f"❌ Erreur Ollama : {type(e).__name__} - {e}")
-            return "Désolé, un problème technique est survenu. Veuillez contacter support@company.com"
+            print(f"❌ Erreur Ollama : {e}")
+            return {
+                "reply": "Désolé, problème technique. Contactez support@company.com",
+                "source": "error"
+            }
