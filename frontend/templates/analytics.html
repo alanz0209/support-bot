@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Analytics - Support</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="chat-header">
+            <h1>📈 Analytics</h1>
+            <a href="/dashboard" class="admin-link">📊 Retour Dashboard</a>
+        </header>
+        
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="number">{{ stats.total }}</div>
+                <div class="label">Total Conversations</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ stats.positive_feedback }}</div>
+                <div class="label">Feedbacks Positifs</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ stats.negative_feedback }}</div>
+                <div class="label">Feedbacks Négatifs</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ stats.by_priority.get('urgent', 0) }}</div>
+                <div class="label">Tickets Urgents</div>
+            </div>
+        </div>
+        
+        <div class="analytics-grid">
+            <div class="chart-card">
+                <h3>📅 Conversations (7 derniers jours)</h3>
+                <table>
+                    <tr><th>Date</th><th>Nombre</th></tr>
+                    {% for day, count in analytics.daily_conversations %}
+                    <tr><td>{{ day }}</td><td>{{ count }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            
+            <div class="chart-card">
+                <h3>❓ Top Questions</h3>
+                <table>
+                    <tr><th>Question</th><th>Fréquence</th></tr>
+                    {% for question, count in analytics.top_questions %}
+                    <tr><td>{{ question[:50] }}...</td><td>{{ count }}x</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            
+            <div class="chart-card">
+                <h3>🎯 Répartition par Statut</h3>
+                <table>
+                    <tr><th>Statut</th><th>Nombre</th></tr>
+                    {% for status, count in stats.by_status.items() %}
+                    <tr><td>{{ status }}</td><td>{{ count }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            
+            <div class="chart-card">
+                <h3>⚡ Répartition par Priorité</h3>
+                <table>
+                    <tr><th>Priorité</th><th>Nombre</th></tr>
+                    {% for priority, count in stats.by_priority.items() %}
+                    <tr><td>{{ priority }}</td><td>{{ count }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

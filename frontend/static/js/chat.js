@@ -1,91 +1,153 @@
-// Attendre que le DOM soit complètement chargé
 document.addEventListener('DOMContentLoaded', function() {
     const chatMessages = document.getElementById('chatMessages');
     const userInput = document.getElementById('userInput');
-    const sendButton = document.querySelector('button');
-
-    // Vérifier que les éléments existent
-    if (!userInput) {
-        console.error("❌ Erreur: L'élément 'userInput' n'existe pas dans le HTML");
-        return;
-    }
+    const sendBtn = document.getElementById('sendBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const fileName = document.getElementById('fileName');
     
-    if (!chatMessages) {
-        console.error("❌ Erreur: L'élément 'chatMessages' n'existe pas dans le HTML");
-        return;
-    }
+    let selectedFile = null;
 
-    // Fonction pour envoyer un message
-    async function sendMessage() {
+    // Gestion sélection de fichier
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            selectedFile = e.target.files[0];
+            fileName.textContent = `📎 ${selectedFile.name}`;
+            fileUploadArea.style.display = 'flex';
+        }
+    });
+
+    // Supprimer fichier
+    window.removeFile = function() {
+        selectedFile = null;
+        fileInput.value = '';
+        fileUploadArea.style.display = 'none';
+    };
+
+    // Envoyer message
+    window.sendMessage = async function() {
         const message = userInput.value.trim();
-        if (!message) return;
+        if (!message && !selectedFile) return;
 
-        // Ajouter le message de l'utilisateur
-        addMessage(message, 'user');
+        // Message utilisateur
+        let displayMessage = message;
+        if (selectedFile) {
+            displayMessage += message ? `\n📎 Fichier : ${selectedFile.name}` : `📎 Fichier : ${selectedFile.name}`;
+        }
+        addMessage(displayMessage, 'user');
+        
         userInput.value = '';
+        const fileToSend = selectedFile;
+        removeFile();
 
-        // Afficher un indicateur de chargement
-        const loadingDiv = document.createElement('div');
-        loadingDiv.className = 'message bot';
-        loadingDiv.id = 'loading-msg';
-        loadingDiv.innerHTML = '<em>Bot est en train d\'écrire...</em>';
-        chatMessages.appendChild(loadingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // Indicateur de frappe
+        const typingDiv = showTypingIndicator();
 
         try {
+            // Upload fichier si présent
+            let fileUrl = null;
+            if (fileToSend) {
+                const formData = new FormData();
+                formData.append('file', fileToSend);
+                
+                const uploadResponse = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const uploadData = await uploadResponse.json();
+                if (uploadData.success) {
+                    fileUrl = uploadData.url;
+                }
+            }
+
+            // Appel API chat
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ message: message })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    file_url: fileUrl
+                })
             });
             
             const data = await response.json();
+            typingDiv.remove();
+            addMessage(data.reply, 'bot', data.source);
             
-            // Supprimer le message de chargement
-            const loadingMsg = document.getElementById('loading-msg');
-            if (loadingMsg) {
-                loadingMsg.remove();
+            // Feedback buttons
+            if (data.source !== 'FAQ') {
+                addFeedbackButtons(chatMessages.lastElementChild);
             }
             
-            // Ajouter la réponse du bot
-            addMessage(data.reply, 'bot');
         } catch (error) {
             console.error('Erreur:', error);
-            const loadingMsg = document.getElementById('loading-msg');
-            if (loadingMsg) {
-                loadingMsg.remove();
-            }
-            addMessage('❌ Erreur de connexion au serveur', 'bot');
+            typingDiv.remove();
+            addMessage('❌ Erreur de connexion. Veuillez réessayer.', 'bot');
         }
-    }
+    };
 
-    // Fonction pour ajouter un message à l'écran
-    function addMessage(text, sender) {
+    // Ajouter message à l'écran
+    function addMessage(text, sender, source = null) {
         const div = document.createElement('div');
-        div.className = `message ${sender}`;
+        div.className = `message ${sender}${source === 'FAQ' ? ' faq' : ''}`;
+        
         const strong = document.createElement('strong');
-        strong.textContent = sender === 'user' ? 'Vous: ' : 'Bot: ';
-        const textNode = document.createTextNode(text);
+        strong.textContent = sender === 'user' ? 'Vous' : '🤖 Bot';
+        if (source === 'FAQ') {
+            strong.textContent += ' (Réponse rapide)';
+        }
+        
+        const textNode = document.createElement('div');
+        textNode.textContent = text;
+        
         div.appendChild(strong);
         div.appendChild(textNode);
         chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+        return div;
     }
 
-    // Ajouter l'événement clic sur le bouton
-    if (sendButton) {
-        sendButton.addEventListener('click', sendMessage);
+    // Indicateur de frappe
+    function showTypingIndicator() {
+        const div = document.createElement('div');
+        div.className = 'typing-indicator';
+        div.id = 'typingIndicator';
+        div.innerHTML = '<span></span><span></span><span></span>';
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return div;
     }
 
-    // Ajouter l'événement touche Entrée
+    // Boutons de feedback
+    function addFeedbackButtons(messageDiv) {
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'feedback';
+        feedbackDiv.innerHTML = `
+            <button onclick="sendFeedback(true, this)">👍 Utile</button>
+            <button onclick="sendFeedback(false, this)">👎 Pas utile</button>
+        `;
+        messageDiv.appendChild(feedbackDiv);
+    }
+
+    // Envoyer feedback
+    window.sendFeedback = async function(isPositive, button) {
+        const feedbackDiv = button.parentElement;
+        feedbackDiv.innerHTML = isPositive ? '✅ Merci pour votre feedback !' : '❌ Merci, nous améliorerons cette réponse';
+        
+        await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positive: isPositive })
+        });
+    };
+
+    // Touche Entrée
     userInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendMessage();
         }
     });
-    
-    // Focus sur le champ de saisie au chargement
+
     userInput.focus();
 });

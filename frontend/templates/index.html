@@ -1,31 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Support Bot</title>
+    <title>Support Assistant</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="chat-container">
         <header class="chat-header">
             <h1>🤖 Support Assistant</h1>
-            <a href="/dashboard" class="admin-link">Admin Dashboard</a>
+            <a href="/dashboard" class="admin-link">📊 Dashboard</a>
         </header>
         
         <div class="chat-messages" id="chatMessages">
             <div class="message bot">
-                <strong>Bot:</strong> Bonjour ! Comment puis-je vous aider aujourd'hui ?
+                <strong>Bot</strong>
+                Bonjour ! Je suis votre assistant support. Comment puis-je vous aider aujourd'hui ?
             </div>
         </div>
         
         <div class="chat-input-area">
-            <input type="text" id="userInput" placeholder="Type your message...">
-            <button onclick="sendMessage()">Send</button>
-        </div>
-        <div class="feedback">
-            <button onclick="feedback(true)">👍 Utile</button>
-            <button onclick="feedback(false)">👎 Pas utile</button>
+            <div class="file-upload-area" id="fileUploadArea" style="display: none;">
+                <div class="file-preview" id="filePreview">
+                    <span id="fileName"></span>
+                    <span class="remove-file" onclick="removeFile()">✕</span>
+                </div>
+            </div>
+            
+            <div class="input-row">
+                <label for="fileInput" class="file-upload-label">
+                    📎 Joindre un fichier
+                </label>
+                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.gif,.txt,.pdf,.log">
+                
+                <input type="text" id="userInput" placeholder="Tapez votre message...">
+                <button onclick="sendMessage()" id="sendBtn">Envoyer</button>
+            </div>
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>

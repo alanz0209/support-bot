@@ -1,36 +1,110 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Admin Dashboard</title>
+    <title>Dashboard - Support</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="dashboard-container">
         <header class="chat-header">
-            <h1>📊 Support Tickets</h1>
-            <a href="/" class="admin-link">Back to Chat</a>
+            <h1>📊 Dashboard Support</h1>
+            <div>
+                <a href="/analytics" class="admin-link">📈 Analytics</a>
+                <a href="/" class="admin-link">💬 Retour au Chat</a>
+            </div>
         </header>
+        
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="number">{{ stats.total }}</div>
+                <div class="label">Total Tickets</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ stats.by_status.get('open', 0) }}</div>
+                <div class="label">Ouverts</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ stats.by_status.get('resolved', 0) }}</div>
+                <div class="label">Résolus</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">
+                    {% if stats.positive_feedback + stats.negative_feedback > 0 %}
+                        {{ (stats.positive_feedback * 100 / (stats.positive_feedback + stats.negative_feedback)) | round(1) }}%
+                    {% else %}
+                        0%
+                    {% endif %}
+                </div>
+                <div class="label">Satisfaction</div>
+            </div>
+        </div>
+        
         <table>
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>User Message</th>
-                    <th>Bot Response</th>
-                    <th>Time</th>
+                    <th>Message</th>
+                    <th>Réponse</th>
+                    <th>Statut</th>
+                    <th>Priorité</th>
+                    <th>Fichier</th>
+                    <th>Date</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for ticket in tickets %}
                 <tr>
-                    <td>{{ ticket[0] }}</td>
-                    <td>{{ ticket[1] }}</td>
-                    <td>{{ ticket[2] }}</td>
-                    <td>{{ ticket[3] }}</td>
+                    <td>#{{ ticket[0] }}</td>
+                    <td>{{ ticket[1][:50] }}...</td>
+                    <td>{{ ticket[2][:50] }}...</td>
+                    <td>
+                        <select onchange="updateStatus({{ ticket[0] }}, this.value)">
+                            <option value="open" {% if ticket[3] == 'open' %}selected{% endif %}>🟡 Ouvert</option>
+                            <option value="progress" {% if ticket[3] == 'progress' %}selected{% endif %}>🔵 En cours</option>
+                            <option value="resolved" {% if ticket[3] == 'resolved' %}selected{% endif %}>🟢 Résolu</option>
+                        </select>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ ticket[4] }}">
+                            {{ ticket[4] }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if ticket[6] %}
+                            <a href="{{ ticket[6] }}" target="_blank">📎 Voir</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ ticket[8] }}</td>
+                    <td>
+                        <button onclick="updatePriority({{ ticket[0] }}, 'urgent')" style="padding: 5px 10px; font-size: 0.8rem;">🔴 Urgent</button>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    
+    <script>
+        async function updateStatus(id, status) {
+            await fetch(`/api/tickets/${id}/status`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status})
+            });
+        }
+        
+        async function updatePriority(id, priority) {
+            await fetch(`/api/tickets/${id}/priority`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({priority})
+            });
+            location.reload();
+        }
+    </script>
 </body>
 </html>
